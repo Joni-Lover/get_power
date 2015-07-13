@@ -92,7 +92,7 @@ main () {
   is_blade=`dmidecode | grep -i "Location In Chassis" | grep -c Slot`
 
   if [[ $is_blade -eq 1 ]]; then
-    slot=$(dmidecode | grep -i "Location In Chassis" | awk -F: '{print $2}' | perl -l -ne '/^.+?Slot(\d+).*?$/ && print $1')
+    slot=$(dmidecode | grep -i "Location In Chassis" | awk -F: '{print $2}' | sed -r "s/^.+?Slot(\w+).*?$/\1/" | sed -r "s/^0(\w+)$/\1/")
     result=
     retry=0
     while [[ $retry -lt $MAX_RETRY ]] && [[ -z $result ]]; do
