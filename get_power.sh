@@ -110,7 +110,7 @@ main () {
     if [ "$(ps ax | grep -v grep | grep -c ipmitool)" -gt "3" ];
       then echo '0';
     else
-      ipmitool sdr | awk -F"|" '{if (tolower($2) ~ /watt/) print $2}' | awk 'BEGIN {RS = "\n" ; FS = " " } { SUM+=$1} END {print SUM}'
+      cache $TIME_CACHE_VALUE_SECS "ipmitool sdr | awk -F\"|\" '{if (tolower(\$2) ~ /watt/) print \$2}' | awk 'BEGIN {RS = \"\\n\" ; FS = \" \" } { SUM+=\$1} END {print SUM}'"
     fi
   fi
 }
