@@ -9,14 +9,14 @@
 #                (getting from IBM Blade Center chassis)
 #
 #       OPTIONS: ---
-#  REQUIREMENTS: ipmitool, dmidecode, snmpwalk, perl, awk, date, ls, cat,
+#  REQUIREMENTS: ipmitool, dmidecode, snmpwalk, awk, date, ls, cat,
 #                flock, pgrep, mktemp, hostname, ps
 #          BUGS: ---
 #         NOTES: ---
 #        AUTHOR: Polonevich Ivan
 #  ORGANIZATION:
 #       CREATED: 07/06/2015 14:57
-#      REVISION: 004
+#      REVISION: 005
 #===============================================================================
 
 #set -x                                     # Uncomment for debug
@@ -25,7 +25,8 @@ set -o nounset                              # Treat unset variables as an error
 readonly TMP_DIR='/tmp'
 readonly PROGNAME=$(basename "$0")
 readonly LOCK_FD=200
-readonly TIME_CACHE_SECS=14400
+readonly TIME_CACHE_INDEX_SECS=14400
+readonly TIME_CACHE_VALUE_SECS=60
 readonly MAX_RETRY=6
 readonly IP=                                # IP IBM Blade Center
 
@@ -48,10 +49,10 @@ eexit() {
   exit 1
 }
 cache() {
-  local time_cashe=$TIME_CACHE_SECS
   local cache_file=$TMP_DIR/${FUNCNAME[1]}.cached
   local -a tmp_vars=($@)
-  local command_for_cache=${tmp_vars[@]}
+  local time_cache_sec=${tmp_vars[0]}
+  local command_for_cache=${tmp_vars[@]:1:${#tmp_vars[*]}}
 
   if [[ "$command_for_cache" == "remove_cached_file" ]]; then
     rm -f $TMP_DIR/*.cached
@@ -64,7 +65,7 @@ cache() {
     local time_diff=$(($time_now - $time_file))
     local result=
 
-    if [[ $time_diff -ge $TIME_CACHE_SECS ]];then
+    if [[ $time_diff -ge $time_cache_sec ]];then
       result=$(cat $cache_file)
       ( { [[ ! $(pgrep $(echo $command_for_cache | awk '{print $1}')) ]] && local tmpfile=$(mktemp ${cache_file}.XXXXX); eval $command_for_cache > $tmpfile; mv -f $tmpfile $cache_file;} > /dev/null 2>&1 &);
     else
@@ -80,7 +81,7 @@ get_index() {
   local IP="$1"
   local result=
   oid="for i in 2 3; do walktree=\$(snmpwalk -Oqn -r2 -t30 -c public -v1 $IP .1.3.6.1.4.1.2.3.51.2.2.10.\$i.1.1.2| grep \"serverBladeBay$slot(\" ) ; if [[ \$walktree ]]; then echo \$walktree | awk '{b=gensub(/(\w+).1.1.2.(\w+)/, \"\\\\1.1.1.7.\\\\2\", \"g\", \$1 ); print b}' 2>/dev/null ; break;fi ;done"
-  result=$(cache $oid)
+  result=$(cache $TIME_CACHE_INDEX_SECS $oid)
   if [[ -z $result ]];then
     exit 1
   fi 
@@ -96,7 +97,7 @@ main () {
     result=
     retry=0
     while [[ $retry -lt $MAX_RETRY ]] && [[ -z $result ]]; do
-      result=$(snmpwalk -r2 -t20 -c public -v1 $IP $(get_index $IP $slot) 2>/dev/null | sed -r "s/^.*\"(\w+)W\"$/\1/")
+      result=$(cache $TIME_CACHE_VALUE_SECS snmpwalk -r2 -t20 -c public -v1 $IP $(get_index $IP $slot) 2>/dev/null | sed -r "s/^.*\"(\w+)W\"$/\1/")
       ((retry++))
       if [[ $retry -eq 6 ]];then
         # Clean cache
